@@ -51,7 +51,7 @@ ${message.content}`;
       return;
     }
 
-    // 必須項目だけチェック（チケットリンクは除く）
+    // 必須項目だけチェック（チケットリンクは除外）
     const missing = [];
     if (!data["イベント名"]) missing.push("イベント名");
     if (!data["日付"]) missing.push("日付");
@@ -79,18 +79,25 @@ ${message.content}`;
       return;
     }
 
+    // 告知メッセージ組み立て
     let content = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
 ◤adv ¥${data["予約価格"]} / door ¥${data["当日価格"]}+1d
 ◤at ${data["場所"]}`;
-
     if (data["チケットリンク"]) {
       content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
     }
 
+    // 即時プレビュー送信
+    message.reply({
+      content: `✅ 以下の内容で告知予約したよ！\n\n${content}`,
+      files: [flyer.url]
+    });
+
+    // スケジュールで投稿
     schedule.scheduleJob(scheduleDate, () => {
-      const channel = client.channels.cache.get('1385390915249508464'); // チャンネルIDを置き換えてね
+      const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // チャンネルIDに置き換えてね
       if (channel) {
         channel.send({
           content: content,
@@ -99,7 +106,6 @@ ${message.content}`;
       }
     });
 
-    message.reply(`✅ 告知予約を受け付けたよ！！`);
   } catch (err) {
     console.error("OpenAI呼び出しエラー:", err);
     message.reply("⚠ データ抽出に失敗しました。もう一度試してください！！");
