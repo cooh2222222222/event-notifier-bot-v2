@@ -15,7 +15,7 @@ const openai = new OpenAIApi(new Configuration({
 }));
 
 client.once('ready', () => {
-  console.log(`✅ ログイン成功: ${client.user.tag}`);
+  console.log(`✅ ログイン成功！: ${client.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
@@ -23,7 +23,7 @@ client.on('messageCreate', async (message) => {
 
   const flyer = message.attachments.first();
   if (!flyer) {
-    message.reply("⚠ 画像を添付してください！");
+    message.reply("⚠ 画像を添付してください！！");
     return;
   }
 
@@ -57,7 +57,7 @@ ${message.content}`;
 
     const scheduleDate = new Date(dateStr);
     if (isNaN(scheduleDate)) {
-      message.reply("⚠ 日付や時間の形式が不正です！");
+      message.reply("⚠ 日付や時間の形式が不正です！！");
       return;
     }
 
@@ -77,10 +77,10 @@ ${message.content}`;
       }
     });
 
-    message.reply(`✅ 告知予約を受け付けたよ！`);
+    message.reply(`✅ 告知予約を受け付けたよ！！`);
   } catch (err) {
     console.error(err);
-    message.reply("⚠ データ抽出に失敗しました。もう一度試してください！");
+    message.reply("⚠ データ抽出に失敗しました。もう一度試してください!！");
   }
 });
 
