@@ -20,12 +20,11 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (message.attachments.size === 0) {
-    message.reply("⚠ 画像を添付してください！");
+    await message.reply("⚠ 画像を添付してください！");
     return;
   }
 
   const flyer = message.attachments.first();
-
   const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所を含む有効な JSON オブジェクトのみを返してください。
 絶対に他の文章、説明、補足は不要です。
 1行の JSON のみを返してください。
@@ -38,14 +37,11 @@ ${message.content}`;
       messages: [{ role: "user", content: prompt }]
     });
 
-    const resultText = response.data.choices[0].message.content;
+    const resultText = response.data.choices[0].message.content.trim();
     console.log("OpenAIレスポンス:", resultText);
 
-    const jsonMatch = resultText.trim().match(/^\{[\s\S]*\}$/);
-    if (!jsonMatch) {
-      message.reply("⚠ OpenAI の返答が正しい JSON じゃなかったよ。もう一度試してね！");
-      return;
-    }
+    const jsonMatch = resultText.match(/^\{[\s\S]*\}$/);
+    if (!jsonMatch) throw new Error("JSON形式が不正");
 
     const data = JSON.parse(jsonMatch[0]);
 
@@ -58,7 +54,7 @@ ${message.content}`;
     if (!data["場所"]) missing.push("場所");
 
     if (missing.length > 0) {
-      message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
+      await message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
       return;
     }
 
@@ -81,14 +77,14 @@ ${message.content}`;
       }
     }
 
-    message.channel.send({
+    await message.channel.send({
       content: content,
       files: [flyer.url]
     });
 
   } catch (err) {
     console.error("エラー:", err);
-    message.reply("⚠ データ抽出に失敗しました。もう一度試してね！");
+    await message.reply("⚠ データ抽出に失敗しました。もう一度試してね！");
   }
 });
 
