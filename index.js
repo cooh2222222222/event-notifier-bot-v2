@@ -15,7 +15,7 @@ const openai = new OpenAIApi(new Configuration({
 }));
 
 client.once('ready', () => {
-  console.log(`✅ ログイン成功: ${client.user.tag}`);
+  console.log(`✅ ログイン成功！: ${client.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
