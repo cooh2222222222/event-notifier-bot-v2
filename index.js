@@ -80,7 +80,7 @@ ${message.content}`;
     message.reply(`✅ 告知予約を受け付けたよ！！`);
   } catch (err) {
     console.error(err);
-    message.reply("⚠ データ抽出に失敗しました。もう一度試してください！");
+    message.reply("⚠ データ抽出に失敗しました。もう一度試してください!！");
   }
 });
 
