@@ -26,21 +26,21 @@ client.on('messageCreate', async (message) => {
 
   const flyer = message.attachments.first();
 
-  const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所をJSONで返してください。
-見つからない項目は null にしてください。
-必ず有効な JSON オブジェクトだけを返してください。他の文章は不要です。
+  const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所を含む有効な JSON オブジェクトだけを返してください。
+絶対に他の文章や説明、補足は不要です。JSON のみを返してください。
 テキスト:
 ${message.content}`;
 
   try {
     const response = await openai.createChatCompletion({
-      model: "gpt-4.1",
+      model: "gpt-4-turbo",
       messages: [{ role: "user", content: prompt }]
     });
 
     const resultText = response.data.choices[0].message.content;
     console.log("OpenAIレスポンス:", resultText);
 
+    // JSON 部分だけを抽出
     const jsonMatch = resultText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       message.reply("⚠ OpenAI の返答が正しい JSON じゃなかったよ。もう一度試してね！");
@@ -49,6 +49,7 @@ ${message.content}`;
 
     const data = JSON.parse(jsonMatch[0]);
 
+    // 必須項目確認
     const missing = [];
     if (!data["イベント名"]) missing.push("イベント名");
     if (!data["日付"]) missing.push("日付");
@@ -62,6 +63,7 @@ ${message.content}`;
       return;
     }
 
+    // 告知文組み立て
     let content = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
@@ -71,6 +73,7 @@ ${message.content}`;
       content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
     }
 
+    // 告知即送信
     message.channel.send({
       content: content,
       files: [flyer.url]
@@ -78,7 +81,7 @@ ${message.content}`;
 
   } catch (err) {
     console.error("エラー:", err);
-    message.reply("⚠ データ抽出に失敗しました。再度試してね！");
+    message.reply("⚠ データ抽出に失敗しました。もう一度試してね！");
   }
 });
 
