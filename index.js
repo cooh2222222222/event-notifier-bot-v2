@@ -51,7 +51,7 @@ ${message.content}`;
       return;
     }
 
-    const missing = Object.keys(data).filter(key => !data[key]);
+    const missing = Object.keys(data).filter(key => !data[key] && key !== "チケットリンク");
     if (missing.length > 0) {
       message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
       return;
@@ -71,16 +71,21 @@ ${message.content}`;
       return;
     }
 
-    schedule.scheduleJob(scheduleDate, () => {
-      const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // ここはチャンネルIDに置き換えてね！
-      if (channel) {
-        channel.send({
-          content: `【🎤${data["イベント名"]}🎤】
+    let content = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
 ◤adv ¥${data["予約価格"]} / door ¥${data["当日価格"]}+1d
-◤ticket ▶︎ ${data["チケットリンク"]}
-◤at ${data["場所"]}`,
+◤at ${data["場所"]}`;
+
+    if (data["チケットリンク"]) {
+      content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
+    }
+
+    schedule.scheduleJob(scheduleDate, () => {
+      const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // 必要に応じて置き換えてね！
+      if (channel) {
+        channel.send({
+          content: content,
           files: [flyer.url]
         });
       }
