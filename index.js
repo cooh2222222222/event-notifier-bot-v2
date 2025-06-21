@@ -51,7 +51,15 @@ ${message.content}`;
       return;
     }
 
-    const missing = Object.keys(data).filter(key => !data[key] && key !== "チケットリンク");
+    // 必須項目だけチェック（チケットリンクは除く）
+    const missing = [];
+    if (!data["イベント名"]) missing.push("イベント名");
+    if (!data["日付"]) missing.push("日付");
+    if (!data["オープン時間"]) missing.push("オープン時間");
+    if (!data["予約価格"]) missing.push("予約価格");
+    if (!data["当日価格"]) missing.push("当日価格");
+    if (!data["場所"]) missing.push("場所");
+
     if (missing.length > 0) {
       message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
       return;
@@ -82,7 +90,7 @@ ${message.content}`;
     }
 
     schedule.scheduleJob(scheduleDate, () => {
-      const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // 必要に応じて置き換えてね！
+      const channel = client.channels.cache.get('1385390915249508464'); // チャンネルIDを置き換えてね
       if (channel) {
         channel.send({
           content: content,
