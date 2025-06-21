@@ -14,6 +14,8 @@ const openai = new OpenAIApi(new Configuration({
   apiKey: process.env.OPENAI_API_KEY
 }));
 
+const scheduledContents = {};
+
 client.once('ready', () => {
   console.log(`✅ ログイン成功！: ${client.user.tag}`);
 });
@@ -22,93 +24,100 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const flyer = message.attachments.first();
-  if (!flyer) {
-    message.reply("⚠ 画像を添付してください！！");
-    return;
-  }
 
-  const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所をJSONで返してください。
+  // 最初の告知投稿
+  if (flyer) {
+    const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所をJSONで返してください。
 見つからない項目は null にしてください。
 必ず有効な JSON オブジェクトだけを返してください。他の文章は不要です。
 テキスト:
 ${message.content}`;
 
-  try {
-    const response = await openai.createChatCompletion({
-      model: "gpt-4.1",
-      messages: [{ role: "user", content: prompt }]
-    });
-
-    const resultText = response.data.choices[0].message.content;
-    console.log("OpenAIレスポンス:", resultText);
-
-    let data;
     try {
-      data = JSON.parse(resultText);
-    } catch (parseErr) {
-      console.error("JSONパース失敗:", parseErr);
-      message.reply("⚠ OpenAIの返答が不正な形式でした。再度試してね！");
-      return;
-    }
+      const response = await openai.createChatCompletion({
+        model: "gpt-4.1",
+        messages: [{ role: "user", content: prompt }]
+      });
 
-    // 必須項目だけチェック（チケットリンクは除外）
-    const missing = [];
-    if (!data["イベント名"]) missing.push("イベント名");
-    if (!data["日付"]) missing.push("日付");
-    if (!data["オープン時間"]) missing.push("オープン時間");
-    if (!data["予約価格"]) missing.push("予約価格");
-    if (!data["当日価格"]) missing.push("当日価格");
-    if (!data["場所"]) missing.push("場所");
+      const resultText = response.data.choices[0].message.content;
+      console.log("OpenAIレスポンス:", resultText);
 
-    if (missing.length > 0) {
-      message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
-      return;
-    }
+      let data = JSON.parse(resultText);
 
-    let dateStr = `${data["日付"]} ${data["オープン時間"]}`;
-    dateStr = dateStr
-      .replace(/[／.]/g, '-')
-      .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 65248))
-      .replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+      const missing = [];
+      if (!data["イベント名"]) missing.push("イベント名");
+      if (!data["日付"]) missing.push("日付");
+      if (!data["オープン時間"]) missing.push("オープン時間");
+      if (!data["予約価格"]) missing.push("予約価格");
+      if (!data["当日価格"]) missing.push("当日価格");
+      if (!data["場所"]) missing.push("場所");
 
-    const scheduleDate = new Date(dateStr);
-    if (isNaN(scheduleDate)) {
-      message.reply("⚠ 日付や時間の形式が不正です！！");
-      return;
-    }
+      if (missing.length > 0) {
+        message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
+        return;
+      }
 
-    // 告知メッセージ組み立て
-    let content = `【🎤${data["イベント名"]}🎤】
+      let content = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
 ◤adv ¥${data["予約価格"]} / door ¥${data["当日価格"]}+1d
 ◤at ${data["場所"]}`;
-    if (data["チケットリンク"]) {
-      content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
-    }
-
-    // 即時プレビュー送信
-    message.reply({
-      content: `✅ 以下の内容で告知予約したよ！\n\n${content}`,
-      files: [flyer.url]
-    });
-
-    // スケジュールで投稿
-    schedule.scheduleJob(scheduleDate, () => {
-      const channel = client.channels.cache.get('1385390915249508464'); // チャンネルIDに置き換えてね
-      if (channel) {
-        channel.send({
-          content: content,
-          files: [flyer.url]
-        });
+      if (data["チケットリンク"]) {
+        content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
       }
-    });
 
-  } catch (err) {
-    console.error("OpenAI呼び出しエラー:", err);
-    message.reply("⚠ データ抽出に失敗しました。もう一度試してください！！");
+      scheduledContents[message.id] = {
+        content: content,
+        fileUrl: flyer.url
+      };
+
+      message.reply({
+        content: `✅ 告知内容を保存したよ！解禁日をリプで送ってね（例: 2025-07-30 または 7/30）`,
+        files: [flyer.url]
+      });
+
+    } catch (err) {
+      console.error("エラー:", err);
+      message.reply("⚠ データ抽出に失敗しました。再度試してね！");
+    }
+  }
+
+  // リプライで解禁日指定
+  if (message.reference) {
+    const parentId = message.reference.messageId;
+    const scheduled = scheduledContents[parentId];
+    if (scheduled) {
+      const input = message.content.trim();
+      const now = new Date();
+      let dateStr = "";
+
+      // 柔軟なフォーマット対応
+      if (/^\d{1,2}\/\d{1,2}$/.test(input)) {
+        // 7/30 → 今年の7/30
+        dateStr = `${now.getFullYear()}-${input.replace('/', '-')}`;
+      } else if (/^\d{1,2}月\d{1,2}日$/.test(input)) {
+        // 7月30日 → 今年の7-30
+        dateStr = `${now.getFullYear()}-${input.replace('月', '-').replace('日', '')}`;
+      } else {
+        // その他はそのまま試す
+        dateStr = input;
+      }
+
+      const finalDate = new Date(`${dateStr} 20:00`);
+      if (isNaN(finalDate)) {
+        message.reply("⚠ 日付の形式が不正です！例: 2025-07-30 または 7/30 または 7月30日");
+        return;
+      }
+
+      schedule.scheduleJob(finalDate, () => {
+        message.channel.send({
+          content: scheduled.content,
+          files: [scheduled.fileUrl]
+        });
+      });
+
+      message.reply(`✅ ${finalDate.toLocaleString()} に告知をスケジュールしたよ！`);
+    }
   }
 });
 
