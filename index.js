@@ -23,7 +23,7 @@ client.on('messageCreate', async (message) => {
 
   const flyer = message.attachments.first();
   if (!flyer) {
-    message.reply("⚠ 画像を添付してください！");
+    message.reply("⚠ 画像を添付してください！！");
     return;
   }
 
