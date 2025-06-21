@@ -26,8 +26,9 @@ client.on('messageCreate', async (message) => {
 
   const flyer = message.attachments.first();
 
-  const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所を含む有効な JSON オブジェクトだけを返してください。
-絶対に他の文章や説明、補足は不要です。JSON のみを返してください。
+  const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所を含む有効な JSON オブジェクトのみを返してください。
+絶対に他の文章、説明、補足は不要です。
+1行の JSON のみを返してください。
 テキスト:
 ${message.content}`;
 
@@ -40,8 +41,7 @@ ${message.content}`;
     const resultText = response.data.choices[0].message.content;
     console.log("OpenAIレスポンス:", resultText);
 
-    // JSON 部分だけを抽出
-    const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+    const jsonMatch = resultText.trim().match(/^\{[\s\S]*\}$/);
     if (!jsonMatch) {
       message.reply("⚠ OpenAI の返答が正しい JSON じゃなかったよ。もう一度試してね！");
       return;
@@ -49,7 +49,6 @@ ${message.content}`;
 
     const data = JSON.parse(jsonMatch[0]);
 
-    // 必須項目確認
     const missing = [];
     if (!data["イベント名"]) missing.push("イベント名");
     if (!data["日付"]) missing.push("日付");
@@ -63,17 +62,25 @@ ${message.content}`;
       return;
     }
 
-    // 告知文組み立て
     let content = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
 ◤adv ¥${data["予約価格"]} / door ¥${data["当日価格"]}+1d
 ◤at ${data["場所"]}`;
+
     if (data["チケットリンク"]) {
-      content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
+      const link = data["チケットリンク"];
+      if (
+        !link.includes("instagram.com") &&
+        !link.includes("x.com") &&
+        !link.includes("twitter.com")
+      ) {
+        content += `\n◤ticket ▶︎ ${link}`;
+      } else {
+        console.log("除外されたリンク:", link);
+      }
     }
 
-    // 告知即送信
     message.channel.send({
       content: content,
       files: [flyer.url]
