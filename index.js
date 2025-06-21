@@ -14,8 +14,6 @@ const openai = new OpenAIApi(new Configuration({
   apiKey: process.env.OPENAI_API_KEY
 }));
 
-const scheduledContents = {};
-
 client.once('ready', () => {
   console.log(`✅ ログイン成功！: ${client.user.tag}`);
 });
@@ -23,16 +21,11 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  if (message.reference) {
-    handleReply(message);
-  } else if (message.attachments.size > 0) {
-    handleNewAnnouncement(message);
-  }
-});
-
-// 新規告知処理
-async function handleNewAnnouncement(message) {
   const flyer = message.attachments.first();
+  if (!flyer) {
+    message.reply("⚠ 画像を添付してください！！");
+    return;
+  }
 
   const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所をJSONで返してください。
 見つからない項目は null にしてください。
@@ -49,15 +42,16 @@ ${message.content}`;
     const resultText = response.data.choices[0].message.content;
     console.log("OpenAIレスポンス:", resultText);
 
-    // JSON 部分だけ抽出
-    const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      message.reply("⚠ OpenAI の返答が正しい JSON じゃなかったよ。もう一度試してね！");
+    let data;
+    try {
+      data = JSON.parse(resultText);
+    } catch (parseErr) {
+      console.error("JSONパース失敗:", parseErr);
+      message.reply("⚠ OpenAIの返答が不正な形式でした。再度試してね！");
       return;
     }
 
-    const data = JSON.parse(jsonMatch[0]);
-
+    // 必須項目だけチェック（チケットリンクは除外）
     const missing = [];
     if (!data["イベント名"]) missing.push("イベント名");
     if (!data["日付"]) missing.push("日付");
@@ -71,6 +65,21 @@ ${message.content}`;
       return;
     }
 
+    let dateStr = `${data["日付"]} ${data["オープン時間"]}`;
+    dateStr = dateStr
+      .replace(/[／.]/g, '-')
+      .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 65248))
+      .replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const scheduleDate = new Date(dateStr);
+    if (isNaN(scheduleDate)) {
+      message.reply("⚠ 日付や時間の形式が不正です！！");
+      return;
+    }
+
+    // 告知メッセージ組み立て
     let content = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
@@ -80,58 +89,27 @@ ${message.content}`;
       content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
     }
 
-    scheduledContents[message.id] = {
-      content: content,
-      fileUrl: flyer.url
-    };
-
+    // 即時プレビュー送信
     message.reply({
-      content: `✅ 以下の内容で告知を保存したよ！\n\n${content}\n\n📌 告知解禁日をこのメッセージにリプライで送ってね！（例: 2025-07-30 または 7/30 または 7月30日）`,
+      content: `✅ 以下の内容で告知予約したよ！\n\n${content}`,
       files: [flyer.url]
     });
 
-  } catch (err) {
-    console.error("エラー:", err);
-    message.reply("⚠ データ抽出に失敗しました。再度試してね！");
-  }
-}
-
-// リプライで解禁日指定
-function handleReply(message) {
-  const parentId = message.reference.messageId;
-  const scheduled = scheduledContents[parentId];
-
-  if (!scheduled) {
-    message.reply("⚠ 元の告知が見つからないよ！");
-    return;
-  }
-
-  const input = message.content.trim();
-  const now = new Date();
-  let dateStr = "";
-
-  if (/^\d{1,2}\/\d{1,2}$/.test(input)) {
-    dateStr = `${now.getFullYear()}-${input.replace('/', '-')}`;
-  } else if (/^\d{1,2}月\d{1,2}日$/.test(input)) {
-    dateStr = `${now.getFullYear()}-${input.replace('月', '-').replace('日', '')}`;
-  } else {
-    dateStr = input;
-  }
-
-  const finalDate = new Date(`${dateStr} 20:00`);
-  if (isNaN(finalDate)) {
-    message.reply("⚠ 日付の形式が不正です！例: 2025-07-30 または 7/30 または 7月30日");
-    return;
-  }
-
-  schedule.scheduleJob(finalDate, () => {
-    message.channel.send({
-      content: scheduled.content,
-      files: [scheduled.fileUrl]
+    // スケジュールで投稿
+    schedule.scheduleJob(scheduleDate, () => {
+      const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // チャンネルIDに置き換えてね
+      if (channel) {
+        channel.send({
+          content: content,
+          files: [flyer.url]
+        });
+      }
     });
-  });
 
-  message.reply(`✅ ${finalDate.toLocaleString()} に告知をスケジュールしたよ！`);
-}
+  } catch (err) {
+    console.error("OpenAI呼び出しエラー:", err);
+    message.reply("⚠ データ抽出に失敗しました。もう一度試してください！！");
+  }
+});
 
 client.login(process.env.BOT_TOKEN);
