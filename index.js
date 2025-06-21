@@ -49,7 +49,14 @@ ${message.content}`;
     const resultText = response.data.choices[0].message.content;
     console.log("OpenAIレスポンス:", resultText);
 
-    let data = JSON.parse(resultText);
+    // JSON 部分だけ抽出
+    const jsonMatch = resultText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      message.reply("⚠ OpenAI の返答が正しい JSON じゃなかったよ。もう一度試してね！");
+      return;
+    }
+
+    const data = JSON.parse(jsonMatch[0]);
 
     const missing = [];
     if (!data["イベント名"]) missing.push("イベント名");
@@ -73,13 +80,11 @@ ${message.content}`;
       content += `\n◤ticket ▶︎ ${data["チケットリンク"]}`;
     }
 
-    // 保存
     scheduledContents[message.id] = {
       content: content,
       fileUrl: flyer.url
     };
 
-    // プレビューと解禁日リクエストを同時に返す
     message.reply({
       content: `✅ 以下の内容で告知を保存したよ！\n\n${content}\n\n📌 告知解禁日をこのメッセージにリプライで送ってね！（例: 2025-07-30 または 7/30 または 7月30日）`,
       files: [flyer.url]
@@ -101,4 +106,32 @@ function handleReply(message) {
     return;
   }
 
-  const input = message.
+  const input = message.content.trim();
+  const now = new Date();
+  let dateStr = "";
+
+  if (/^\d{1,2}\/\d{1,2}$/.test(input)) {
+    dateStr = `${now.getFullYear()}-${input.replace('/', '-')}`;
+  } else if (/^\d{1,2}月\d{1,2}日$/.test(input)) {
+    dateStr = `${now.getFullYear()}-${input.replace('月', '-').replace('日', '')}`;
+  } else {
+    dateStr = input;
+  }
+
+  const finalDate = new Date(`${dateStr} 20:00`);
+  if (isNaN(finalDate)) {
+    message.reply("⚠ 日付の形式が不正です！例: 2025-07-30 または 7/30 または 7月30日");
+    return;
+  }
+
+  schedule.scheduleJob(finalDate, () => {
+    message.channel.send({
+      content: scheduled.content,
+      files: [scheduled.fileUrl]
+    });
+  });
+
+  message.reply(`✅ ${finalDate.toLocaleString()} に告知をスケジュールしたよ！`);
+}
+
+client.login(process.env.BOT_TOKEN);
