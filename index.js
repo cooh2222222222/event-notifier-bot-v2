@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const schedule = require('node-schedule');
 const { Configuration, OpenAIApi } = require("openai");
+const { Pool } = require('pg');
 
 const client = new Client({
   intents: [
@@ -13,6 +14,10 @@ const client = new Client({
 const openai = new OpenAIApi(new Configuration({
   apiKey: process.env.OPENAI_API_KEY
 }));
+
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
 
 // 投稿データ保持用
 const pendingAnnouncements = {};
@@ -34,21 +39,20 @@ client.on('messageCreate', async (message) => {
     }
 
     let input = message.content.trim()
-      .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 65248)) // 全角数字を半角に
-      .replace(/[／.]/g, '-') // スラッシュやドットをハイフンに
-      .replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '') // 年月日変換
-      .replace(/時/g, ':').replace(/分/g, '') // 時刻表現簡略化
+      .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 65248))
+      .replace(/[／.]/g, '-')
+      .replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '')
+      .replace(/時/g, ':').replace(/分/g, '')
       .replace(/\s+/g, ' ')
       .trim();
 
-    // 時間がない場合は20:00補完
     if (!input.match(/\d{1,2}:\d{2}/)) {
       input += ' 20:00';
     }
 
     let targetDate = new Date(input);
     if (isNaN(targetDate)) {
-      message.reply("⚠ 日付・時間の形式が不正です。例: `2025-07-30 19:00` または `7/30 19:00`");
+      message.reply("⚠ 日付・時間の形式が不正です。例: `2025-07-30 19:00` または `7/30 20:00`");
       return;
     }
 
@@ -58,6 +62,13 @@ client.on('messageCreate', async (message) => {
         files: [pending.image]
       });
     });
+
+    // DBに保存
+    await db.query(
+      `INSERT INTO announcements (content, image_url, scheduled_at, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [pending.content, pending.image, targetDate]
+    );
 
     message.reply(`✅ ${targetDate.toLocaleString()} に告知予約しました！`);
     return;
@@ -98,10 +109,18 @@ ${message.content}`;
 
     await message.reply(`✅ プレビュー:\n${content}\n\n💡 このメッセージに「解禁日と時間」をリプしてね！（例: 2025-07-30 19:00 または 7/30 20:00）`);
 
+    // 一時保存
     pendingAnnouncements[message.id] = {
       content,
       image: flyer.url
     };
+
+    // DBに即保存（プレビュー用）
+    await db.query(
+      `INSERT INTO announcements (content, image_url, created_at)
+       VALUES ($1, $2, NOW())`,
+      [content, flyer.url]
+    );
 
   } catch (err) {
     console.error("エラー:", err);
