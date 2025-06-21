@@ -23,13 +23,13 @@ client.on('messageCreate', async (message) => {
 
   const flyer = message.attachments.first();
   if (!flyer) {
-    message.reply("⚠ 画像を添付してほしいんだけど！");
+    message.reply("⚠ 画像を添付してください！！");
     return;
   }
 
-  const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所、主催をJSONで返して。
-見つからない項目は null にして。
-必ず有効な JSON オブジェクトだけを返して。他の文章は不要。
+  const prompt = `次のテキストからイベント名、日付、オープン時間、予約価格、当日価格、チケットリンク、場所をJSONで返してください。
+見つからない項目は null にしてください。
+必ず有効な JSON オブジェクトだけを返してください。他の文章は不要です。
 テキスト:
 ${message.content}`;
 
@@ -47,26 +47,13 @@ ${message.content}`;
       data = JSON.parse(resultText);
     } catch (parseErr) {
       console.error("JSONパース失敗:", parseErr);
-      message.reply("⚠ OpenAIの返答が不正だった！もう一回お願い！");
+      message.reply("⚠ OpenAIの返答が不正な形式でした。再度試してね！");
       return;
     }
 
-    // 告知文プレビュー＋画像を返す
-    const preview = `【🎤${data["イベント名"]}🎤】
-
-◤${data["日付"]} ${data["オープン時間"]}
-◤adv ¥${data["予約価格"]} / door ¥${data["当日価格"]}+1d
-◤ticket ▶︎ ${data["チケットリンク"]}
-◤at ${data["場所"]}
-◤主催： ${data["主催"]}`;
-    message.reply({
-      content: "📢 告知文プレビュー:\n" + preview,
-      files: [flyer.url]
-    });
-
     const missing = Object.keys(data).filter(key => !data[key]);
     if (missing.length > 0) {
-      message.reply(`⚠ 次の項目が見つかんなかった！: ${missing.join(", ")}`);
+      message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
       return;
     }
 
@@ -80,24 +67,29 @@ ${message.content}`;
 
     const scheduleDate = new Date(dateStr);
     if (isNaN(scheduleDate)) {
-      message.reply("⚠ 日付や時間の形式が変だった！");
+      message.reply("⚠ 日付や時間の形式が不正です！！");
       return;
     }
 
     schedule.scheduleJob(scheduleDate, () => {
-      const channel = client.channels.cache.get(process.env.YOUR_CHANNEL_ID);
+      const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // ここはチャンネルIDに置き換えてね！
       if (channel) {
         channel.send({
-          content: preview,
+          content: `【🎤${data["イベント名"]}🎤】
+
+◤${data["日付"]} ${data["オープン時間"]}
+◤adv ¥${data["予約価格"]} / door ¥${data["当日価格"]}+1d
+◤ticket ▶︎ ${data["チケットリンク"]}
+◤at ${data["場所"]}`,
           files: [flyer.url]
         });
       }
     });
 
-    message.reply("✅ 告知予約も受け付けたよ〜！");
+    message.reply(`✅ 告知予約を受け付けたよ！！`);
   } catch (err) {
     console.error("OpenAI呼び出しエラー:", err);
-    message.reply("⚠ データ抽出に失敗！もう一回お願いね！");
+    message.reply("⚠ データ抽出に失敗しました。もう一度試してください！！");
   }
 });
 
