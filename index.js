@@ -51,7 +51,7 @@ ${message.content}`;
       return;
     }
 
-    // 告知文プレビューを即返信
+    // 告知文プレビュー＋画像を返す
     const preview = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
@@ -59,7 +59,10 @@ ${message.content}`;
 ◤ticket ▶︎ ${data["チケットリンク"]}
 ◤at ${data["場所"]}
 ◤主催： ${data["主催"]}`;
-    message.reply("📢 告知文プレビュー:\n" + preview);
+    message.reply({
+      content: "📢 告知文プレビュー:\n" + preview,
+      files: [flyer.url]
+    });
 
     const missing = Object.keys(data).filter(key => !data[key]);
     if (missing.length > 0) {
@@ -91,7 +94,7 @@ ${message.content}`;
       }
     });
 
-    message.reply("✅ 告知予約を受け付けたよ〜！");
+    message.reply("✅ 告知予約も受け付けたよ〜！");
   } catch (err) {
     console.error("OpenAI呼び出しエラー:", err);
     message.reply("⚠ データ抽出に失敗！もう一回お願いね！");
