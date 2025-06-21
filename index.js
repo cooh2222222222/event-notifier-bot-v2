@@ -97,7 +97,7 @@ ${message.content}`;
 
     // スケジュールで投稿
     schedule.scheduleJob(scheduleDate, () => {
-      const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // チャンネルIDに置き換えてね
+      const channel = client.channels.cache.get('1385390915249508464'); // チャンネルIDに置き換えてね
       if (channel) {
         channel.send({
           content: content,
