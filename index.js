@@ -57,7 +57,7 @@ ${message.content}`;
 
     const scheduleDate = new Date(dateStr);
     if (isNaN(scheduleDate)) {
-      message.reply("⚠ 日付や時間の形式が不正です！");
+      message.reply("⚠ 日付や時間の形式が不正です！！");
       return;
     }
 
