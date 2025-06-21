@@ -34,7 +34,7 @@ ${message.content}`;
 
   try {
     const response = await openai.createChatCompletion({
-      model: "gpt-4-turbo",
+      model: "gpt-4.1",
       messages: [{ role: "user", content: prompt }]
     });
 
