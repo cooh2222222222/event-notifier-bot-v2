@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const schedule = require('node-schedule');
 const { Configuration, OpenAIApi } = require("openai");
 
-// Bot クライアント設定
+// Discord Bot の初期化
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -11,17 +11,17 @@ const client = new Client({
   ]
 });
 
-// OpenAI 設定
+// OpenAI 初期化（Render の環境変数から API KEY を拾う）
 const openai = new OpenAIApi(new Configuration({
   apiKey: process.env.OPENAI_API_KEY
 }));
 
-// Bot ログイン完了時
+// Bot が起動したときのログ
 client.once('ready', () => {
   console.log(`✅ ログイン成功！: ${client.user.tag}`);
 });
 
-// メッセージ受信時
+// メッセージ受信イベント
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
@@ -39,7 +39,7 @@ ${message.content}`;
 
   try {
     const response = await openai.createChatCompletion({
-      model: "gpt-4",
+      model: "gpt-4.1",  // 必ず存在するモデルに修正したよ！（必要に応じて "o4-mini" に変えてもOK）
       messages: [{ role: "user", content: prompt }]
     });
 
@@ -92,12 +92,11 @@ ${message.content}`;
     });
 
     message.reply(`✅ 告知予約を受け付けたよ！！`);
-
   } catch (err) {
     console.error("OpenAI呼び出しエラー:", err);
-    message.reply("⚠ データ抽出に失敗しました。もう一度試してください！！");
+    message.reply("⚠ データ抽出に失敗しました。もう一度試してね！");
   }
 });
 
-// Bot ログイン
+// 環境変数の BOT トークンでログイン
 client.login(process.env.BOT_TOKEN);
