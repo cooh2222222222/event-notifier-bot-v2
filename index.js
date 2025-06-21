@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const schedule = require('node-schedule');
 const { Configuration, OpenAIApi } = require("openai");
-const { Pool } = require('pg');
+const { Client: PgClient } = require('pg');
 
 const client = new Client({
   intents: [
@@ -15,12 +15,32 @@ const openai = new OpenAIApi(new Configuration({
   apiKey: process.env.OPENAI_API_KEY
 }));
 
-const db = new Pool({
+const pgClient = new PgClient({
   connectionString: process.env.DATABASE_URL
 });
 
 // 投稿データ保持用
 const pendingAnnouncements = {};
+
+// DB 初期化
+(async () => {
+  try {
+    await pgClient.connect();
+    await pgClient.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id SERIAL PRIMARY KEY,
+        message_id TEXT UNIQUE NOT NULL,
+        content TEXT NOT NULL,
+        image_url TEXT,
+        release_time TIMESTAMP,
+        posted BOOLEAN DEFAULT FALSE
+      )
+    `);
+    console.log("✅ テーブル確認・作成が完了しました！");
+  } catch (err) {
+    console.error("❌ DB初期化エラー:", err);
+  }
+})();
 
 client.once('ready', () => {
   console.log(`✅ ログイン成功！: ${client.user.tag}`);
@@ -30,7 +50,6 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   if (message.reference) {
-    // リプライで解禁日時設定
     const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
     const pending = pendingAnnouncements[repliedMessage.id];
     if (!pending) {
@@ -56,19 +75,23 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
+    // DB保存
+    try {
+      await pgClient.query(
+        'INSERT INTO announcements (message_id, content, image_url, release_time) VALUES ($1, $2, $3, $4)',
+        [repliedMessage.id, pending.content, pending.image, targetDate]
+      );
+      console.log("✅ データをDBに保存しました！");
+    } catch (dbErr) {
+      console.error("❌ DB保存エラー:", dbErr);
+    }
+
     schedule.scheduleJob(targetDate, () => {
       message.channel.send({
         content: pending.content,
         files: [pending.image]
       });
     });
-
-    // DBに保存
-    await db.query(
-      `INSERT INTO announcements (content, image_url, scheduled_at, created_at)
-       VALUES ($1, $2, $3, NOW())`,
-      [pending.content, pending.image, targetDate]
-    );
 
     message.reply(`✅ ${targetDate.toLocaleString()} に告知予約しました！`);
     return;
@@ -109,21 +132,13 @@ ${message.content}`;
 
     await message.reply(`✅ プレビュー:\n${content}\n\n💡 このメッセージに「解禁日と時間」をリプしてね！（例: 2025-07-30 19:00 または 7/30 20:00）`);
 
-    // 一時保存
     pendingAnnouncements[message.id] = {
       content,
       image: flyer.url
     };
 
-    // DBに即保存（プレビュー用）
-    await db.query(
-      `INSERT INTO announcements (content, image_url, created_at)
-       VALUES ($1, $2, NOW())`,
-      [content, flyer.url]
-    );
-
   } catch (err) {
-    console.error("エラー:", err);
+    console.error("❌ OpenAIエラー:", err);
     message.reply("⚠ データ抽出に失敗しました。もう一度試してね！");
   }
 });
