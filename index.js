@@ -1,4 +1,5 @@
 const { Client, GatewayIntentBits } = require('discord.js');
+const schedule = require('node-schedule');
 const { Configuration, OpenAIApi } = require("openai");
 
 const client = new Client({
@@ -13,14 +14,57 @@ const openai = new OpenAIApi(new Configuration({
   apiKey: process.env.OPENAI_API_KEY
 }));
 
+// 投稿データ保持用
+const pendingAnnouncements = {};
+
 client.once('ready', () => {
   console.log(`✅ ログイン成功！: ${client.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+
+  if (message.reference) {
+    // リプライで解禁日時設定
+    const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+    const pending = pendingAnnouncements[repliedMessage.id];
+    if (!pending) {
+      message.reply("⚠ 元の告知データが見つかりませんでした！");
+      return;
+    }
+
+    let input = message.content.trim()
+      .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 65248)) // 全角数字を半角に
+      .replace(/[／.]/g, '-') // スラッシュやドットをハイフンに
+      .replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '') // 年月日変換
+      .replace(/時/g, ':').replace(/分/g, '') // 時刻表現簡略化
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // 時間がない場合は20:00補完
+    if (!input.match(/\d{1,2}:\d{2}/)) {
+      input += ' 20:00';
+    }
+
+    let targetDate = new Date(input);
+    if (isNaN(targetDate)) {
+      message.reply("⚠ 日付・時間の形式が不正です。例: `2025-07-30 19:00` または `7/30 19:00`");
+      return;
+    }
+
+    schedule.scheduleJob(targetDate, () => {
+      message.channel.send({
+        content: pending.content,
+        files: [pending.image]
+      });
+    });
+
+    message.reply(`✅ ${targetDate.toLocaleString()} に告知予約しました！`);
+    return;
+  }
+
   if (message.attachments.size === 0) {
-    await message.reply("⚠ 画像を添付してください！");
+    message.reply("⚠ 画像を添付してください！");
     return;
   }
 
@@ -38,53 +82,30 @@ ${message.content}`;
     });
 
     const resultText = response.data.choices[0].message.content.trim();
-    console.log("OpenAIレスポンス:", resultText);
-
-    const jsonMatch = resultText.match(/^\{[\s\S]*\}$/);
-    if (!jsonMatch) throw new Error("JSON形式が不正");
-
-    const data = JSON.parse(jsonMatch[0]);
-
-    const missing = [];
-    if (!data["イベント名"]) missing.push("イベント名");
-    if (!data["日付"]) missing.push("日付");
-    if (!data["オープン時間"]) missing.push("オープン時間");
-    if (!data["予約価格"]) missing.push("予約価格");
-    if (!data["当日価格"]) missing.push("当日価格");
-    if (!data["場所"]) missing.push("場所");
-
-    if (missing.length > 0) {
-      await message.reply(`⚠ 次の項目が見つかりませんでした: ${missing.join(", ")}`);
-      return;
-    }
+    const data = JSON.parse(resultText);
 
     let content = `【🎤${data["イベント名"]}🎤】
 
 ◤${data["日付"]} ${data["オープン時間"]}
 ◤adv ¥${data["予約価格"]} / door ¥${data["当日価格"]}+1d
 ◤at ${data["場所"]}`;
-
     if (data["チケットリンク"]) {
       const link = data["チケットリンク"];
-      if (
-        !link.includes("instagram.com") &&
-        !link.includes("x.com") &&
-        !link.includes("twitter.com")
-      ) {
+      if (!link.includes("instagram.com") && !link.includes("x.com") && !link.includes("twitter.com")) {
         content += `\n◤ticket ▶︎ ${link}`;
-      } else {
-        console.log("除外されたリンク:", link);
       }
     }
 
-    await message.channel.send({
-      content: content,
-      files: [flyer.url]
-    });
+    await message.reply(`✅ プレビュー:\n${content}\n\n💡 このメッセージに「解禁日と時間」をリプしてね！（例: 2025-07-30 19:00 または 7/30 20:00）`);
+
+    pendingAnnouncements[message.id] = {
+      content,
+      image: flyer.url
+    };
 
   } catch (err) {
     console.error("エラー:", err);
-    await message.reply("⚠ データ抽出に失敗しました。もう一度試してね！");
+    message.reply("⚠ データ抽出に失敗しました。もう一度試してね！");
   }
 });
 
